@@ -319,6 +319,7 @@ button:focus-visible,[tabindex]:focus-visible,input:focus-visible{outline:2px so
       </div>
       <div id="boxLink" style="display:none;gap:8px">
         <div style="display:flex;gap:8px"><input class="url-input" type="text" id="addUrl" placeholder="http://servidor.com:8080/get.php?username=...&amp;password=...&amp;type=m3u_plus" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn secondary" id="addPaste" type="button" style="flex:0 0 auto">⎘ Colar</button></div>
+        <div id="rawEditor" style="display:none;gap:6px"><textarea class="url-input" id="addRaw" rows="8" placeholder="#EXTM3U&#10;Conteúdo original da lista" style="resize:vertical"></textarea><button class="btn secondary" id="copyRawBtn" type="button">⧉ Copiar texto</button></div>
         <div class="action-row"><button class="btn ghost" id="addFile" type="button">▤ Abrir arquivo</button><button class="btn ghost" id="addText" type="button">✎ Colar texto</button></div>
       </div>
     </div>
@@ -378,7 +379,7 @@ button:focus-visible,[tabindex]:focus-visible,input:focus-visible{outline:2px so
 <dialog id="settingsDlg" class="paste-dlg"><p><b>Configurações do aplicativo</b><br><small>Personalize o StreamBox para seus testes no celular.</small></p>
   <div class="lists-box">
     <div class="settings-section"><div class="settings-title">Identidade</div><label class="setting-row"><span>Nome do aplicativo<small>Nome exibido na tela inicial.</small></span><input type="text" id="settingAppName" maxlength="24" placeholder="StreamBox"></label></div>
-    <div class="settings-section"><div class="settings-title">Aparência</div><label class="setting-row"><span>Tema visual<small>Altera a cor principal da interface.</small></span><select id="settingTheme"><option value="red">Vermelho</option><option value="ocean">Oceano</option><option value="violet">Violeta</option></select></label></div>
+    <div class="settings-section"><div class="settings-title">Aparência</div><label class="setting-row"><span>Tema visual<small>Altera a cor principal da interface.</small></span><select id="settingTheme"><option value="red">Vermelho</option><option value="ocean">Oceano</option><option value="violet">Violeta</option></select></label><label class="setting-row"><span>Visualização da biblioteca<small>Escolha entre capas em cards ou uma lista compacta.</small></span><select id="settingViewMode"><option value="cards">Cards</option><option value="list">Lista</option></select></label></div>
     <div class="settings-section"><div class="settings-title">Reprodução</div><label class="setting-row"><span>Qualidade preferida<small>Preferência usada quando o provedor oferece variantes.</small></span><select id="settingQuality"><option value="auto">Automática</option><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select></label><label class="setting-row setting-check"><input type="checkbox" id="settingAutoplay"> <span>Iniciar reprodução automaticamente<small>Desative para tocar manualmente no celular.</small></span></label></div>
     <div class="settings-section"><div class="settings-title">Atualizações</div><label class="setting-row setting-check"><input type="checkbox" id="settingAutoUpdate"> <span>Atualizar listas automaticamente<small>Aplicado somente às listas adicionadas por URL.</small></span></label><label class="setting-row"><span>Intervalo de atualização</span><select id="settingUpdateInterval"><option value="6">A cada 6 horas</option><option value="12">A cada 12 horas</option><option value="24">Uma vez por dia</option></select></label><label class="setting-row setting-check"><input type="checkbox" id="settingAutoEpg"> <span>Atualizar EPG automaticamente<small>Usa o endereço EPG salvo na lista.</small></span></label></div>
     <div class="settings-section"><div class="settings-title">Dados locais</div><button class="btn secondary" id="clearPrefsBtn" type="button">Limpar favoritos e recentes</button><button class="btn secondary" id="clearListsBtn" type="button">Apagar listas salvas</button></div>
@@ -393,7 +394,7 @@ button:focus-visible,[tabindex]:focus-visible,input:focus-visible{outline:2px so
 const $ = id => document.getElementById(id);
 let channels=[], currentFilter='all', currentChannel=null, hls=null, toastTimer=null, loadToken=0;
 function load(k,d){try{return JSON.parse(localStorage.getItem(k)||'null')??d;}catch(e){return d;}}
-const defaultSettings={appName:'StreamBox',theme:'red',quality:'auto',autoplay:load('streambox_autoplay',true),autoUpdate:false,updateInterval:24,autoEpg:true};
+const defaultSettings={appName:'StreamBox',theme:'red',quality:'auto',viewMode:'cards',autoplay:load('streambox_autoplay',true),autoUpdate:false,updateInterval:24,autoEpg:true};
 let settings=Object.assign({},defaultSettings,load('streambox_settings',{})),autoPlay=!!settings.autoplay,updateTimer=null;
 function applySettings(){
   autoPlay=!!settings.autoplay;document.body.dataset.theme=settings.theme||'red';document.title=(settings.appName||'StreamBox')+' V11 • IPTV Player';
@@ -402,23 +403,25 @@ function applySettings(){
   if(settings.autoUpdate)updateTimer=setInterval(()=>{const it=lists.find(l=>l.name===activeName);if(it&&it.source&&!document.querySelector('dialog[open]')){$('m3uUrl').value=it.source;loadFromUrl(it.name);}},Math.max(1,+settings.updateInterval||24)*3600000);
 }
 function fillSettings(){
-  $('settingAppName').value=settings.appName||'StreamBox';$('settingTheme').value=settings.theme||'red';$('settingQuality').value=settings.quality||'auto';$('settingAutoplay').checked=!!settings.autoplay;$('settingAutoUpdate').checked=!!settings.autoUpdate;$('settingUpdateInterval').value=String(settings.updateInterval||24);$('settingAutoEpg').checked=settings.autoEpg!==false;
+  $('settingAppName').value=settings.appName||'StreamBox';$('settingTheme').value=settings.theme||'red';$('settingViewMode').value=settings.viewMode||'cards';$('settingQuality').value=settings.quality||'auto';$('settingAutoplay').checked=!!settings.autoplay;$('settingAutoUpdate').checked=!!settings.autoUpdate;$('settingUpdateInterval').value=String(settings.updateInterval||24);$('settingAutoEpg').checked=settings.autoEpg!==false;
 }
-function readSettings(){settings={appName:($('settingAppName').value.trim()||'StreamBox').slice(0,24),theme:$('settingTheme').value,quality:$('settingQuality').value,autoplay:$('settingAutoplay').checked,autoUpdate:$('settingAutoUpdate').checked,updateInterval:+$('settingUpdateInterval').value||24,autoEpg:$('settingAutoEpg').checked};try{localStorage.setItem('streambox_settings',JSON.stringify(settings));}catch(e){}applySettings();}
+function readSettings(){settings={appName:($('settingAppName').value.trim()||'StreamBox').slice(0,24),theme:$('settingTheme').value,viewMode:$('settingViewMode').value,quality:$('settingQuality').value,autoplay:$('settingAutoplay').checked,autoUpdate:$('settingAutoUpdate').checked,updateInterval:+$('settingUpdateInterval').value||24,autoEpg:$('settingAutoEpg').checked};try{localStorage.setItem('streambox_settings',JSON.stringify(settings));}catch(e){}applySettings();refreshLibrary();}
 let favorites=new Set(load('streambox_favorites',[]));
 let recent=load('streambox_recent',[]);
 let shown=200,hlsRetries=0;
 let lists=load('streambox_lists',[]),activeName='';
 lists=Array.isArray(lists)?lists.filter(l=>l&&typeof l.name==='string'&&Array.isArray(l.channels)):[];
 function persistLists(){idb.setEncrypted('lists',lists).then(()=>{try{localStorage.removeItem('streambox_lists');}catch(e){}}).catch(()=>{try{localStorage.setItem('streambox_lists',JSON.stringify(lists));}catch(e){toast('Sem espaço para salvar a lista neste aparelho.');}});}
-function onListLoaded(name,source){
-  shown=200;activeName=name;const item={name,channels,source:source||'',updated:Date.now()};
+function onListLoaded(name,source,raw){
+  shown=200;activeName=name;const previous=lists.find(l=>l.name===name);const item={name,channels,source:source||'',raw:raw||((!source&&previous&&previous.raw)||''),updated:Date.now()};
   const old=lists.find(l=>l.name===name);item.epgUrl=(old&&old.epgUrl)||m3uTvg||xtreamEpg(item.source);
-  const i=lists.findIndex(l=>l.name===name);if(i>=0)lists[i]=item;else lists.unshift(item);
+  item.count=channels.length;item.groups=new Set(channels.map(c=>c.group)).size;const i=lists.findIndex(l=>l.name===name);if(i>=0)lists[i]=item;else lists.unshift(item);
   persistLists();try{localStorage.setItem('streambox_active',name);}catch(e){}epgLoad(name);
   showHome();
 }
 let section=null;
+function navPush(view,data={}){history.pushState(Object.assign({sb:1,view},data),'');}
+function navKeep(view,data={}){if(!history.state||history.state.view!==view)navPush(view,data);}
 const homeOn=()=>$('home').style.display!=='none';
 function kindOf(c){
   if(c.kind)return c.kind;const u=c.url||'',g=(c.group||'').toLowerCase();let k='live';
@@ -437,11 +440,11 @@ function renderHome(){renderStrips();vodUI();favNowUI();
   $('pillFav').textContent='★ Favoritos ('+channels.filter(c=>favorites.has(c.url)).length+')';
 }
 function idleUI(){stopPlayback();currentChannel=null;$('placeholder').style.display='block';$('overlayMessage').style.display='none';$('nowPlaying').textContent='Nenhum canal selecionado';$('nowGroup').textContent='Aguardando seleção';setStatus('','PRONTO');}
-function showHome(){idleUI();section=null;setDrawer(false);$('topChannel').textContent='Central de reprodução';$('topSub').textContent='Selecione um item na biblioteca';$('home').style.display='grid';renderHome();}
-function openSection(sec){
+function showHome(fromPop=false){idleUI();section=null;setDrawer(false);$('topChannel').textContent='Central de reprodução';$('topSub').textContent='Selecione um item na biblioteca';$('home').style.display='grid';renderHome();if(!fromPop)navKeep('home');}
+function openSection(sec,fromPop=false){
   section=sec;currentFilter='all';catView=true;shown=200;$('searchInput').value='';$('home').style.display='none';
   $('topChannel').textContent={live:'Ao vivo',movie:'Filmes',series:'Séries'}[sec]||'Biblioteca';$('topSub').textContent='Escolha um item para assistir';
-  refreshLibrary();if(window.matchMedia('(max-width:800px)').matches)setDrawer(true);
+  refreshLibrary();if(window.matchMedia('(max-width:800px)').matches)setDrawer(true);if(!fromPop)navKeep('category',{section:sec});
 }
 function refreshActive(){const it=lists.find(l=>l.name===activeName);if(it&&it.source){$('m3uUrl').value=it.source;loadFromUrl(it.name);}else toast('Esta lista veio de arquivo ou texto. Importe de novo para atualizar.');}
 function showDlg(d){if(d.showModal)d.showModal();else d.setAttribute('open','');}
@@ -533,7 +536,7 @@ function renderChannels(){
     <button class="favorite ${favorites.has(ch.url)?'on':''}" data-fav="${ch.id}" aria-label="Favoritar canal" title="Favoritar">${favorites.has(ch.url)?'★':'☆'}</button>
   </div>`).join('')+(all.length>shown?`<button class="btn secondary more" id="moreBtn">Mostrar mais (${all.length-shown})</button>`:'');
 }
-function refreshLibrary(){$('sidebar').classList.toggle('compact',channels.length>0);renderTabs();renderChannels();updateCounts();renderHome();epgShowNow();$('channelList').classList.toggle('grid',!catView&&(section==='movie'||section==='series'));vodUI();favNowUI();}
+function refreshLibrary(){$('sidebar').classList.toggle('compact',channels.length>0);renderTabs();renderChannels();updateCounts();renderHome();epgShowNow();$('channelList').classList.toggle('grid',settings.viewMode!=='list'&&!catView&&(section==='movie'||section==='series'));vodUI();favNowUI();}
 function setFilter(filter){catView=false;currentFilter=filter;shown=200;renderTabs();renderChannels();}
 let lastLoadError='';
 async function loadFromUrl(listName){
@@ -559,18 +562,19 @@ async function loadFromUrl(listName){
 function loadFromFile(file){
   if(!file)return;const reader=new FileReader();setStatus('loading','LENDO ARQUIVO');
   reader.onload=()=>{const parsed=parseM3U(String(reader.result||''));if(!parsed.length){setStatus('error','ARQUIVO INVÁLIDO');toast('Nenhum canal válido foi encontrado no arquivo.');return;}
-    channels=parsed;currentFilter='all';currentChannel=null;stopPlayback();$('placeholder').style.display='block';$('nowPlaying').textContent='Nenhum canal selecionado';$('nowGroup').textContent='Lista local carregada';$('topChannel').textContent=file.name;$('topSub').textContent='Escolha um canal para assistir';onListLoaded(file.name);refreshLibrary();setStatus('playing','LISTA OK');toast(`${channels.length} canais carregados.`);
+    const raw=String(reader.result||'');channels=parsed;currentFilter='all';currentChannel=null;stopPlayback();$('placeholder').style.display='block';$('nowPlaying').textContent='Nenhum canal selecionado';$('nowGroup').textContent='Lista local carregada';$('topChannel').textContent=file.name;$('topSub').textContent='Escolha um canal para assistir';onListLoaded(file.name,'',raw);refreshLibrary();setStatus('playing','LISTA OK');toast(`${channels.length} canais carregados.`);
   };reader.onerror=()=>{setStatus('error','ERRO');toast('Não foi possível ler o arquivo.');};reader.readAsText(file);
 }
 function loadFromText(text,name){
   const parsed=parseM3U(text);if(!parsed.length){toast('Nenhum canal válido encontrado no texto.');return false;}
-  channels=parsed;currentFilter='all';currentChannel=null;stopPlayback();$('placeholder').style.display='block';$('nowPlaying').textContent='Nenhum canal selecionado';$('nowGroup').textContent='Lista carregada';$('topChannel').textContent=name;$('topSub').textContent='Escolha um canal para assistir';onListLoaded(name);refreshLibrary();setStatus('playing','LISTA OK');toast(`${channels.length} canais carregados.`);return true;
+  channels=parsed;currentFilter='all';currentChannel=null;stopPlayback();$('placeholder').style.display='block';$('nowPlaying').textContent='Nenhum canal selecionado';$('nowGroup').textContent='Lista carregada';$('topChannel').textContent=name;$('topSub').textContent='Escolha um canal para assistir';onListLoaded(name,'',String(text||''));refreshLibrary();setStatus('playing','LISTA OK');toast(`${channels.length} canais carregados.`);return true;
 }
 function renderListsDlg(){
-  $('listsBox').innerHTML=lists.length?lists.map((l,i)=>`<div class="list-item ${l.name===activeName?'active':''}"><div class="li-info"><div class="channel-name">${escapeHtml(l.name)}</div><div class="channel-group">${l.channels.length} canais • ${new Set(l.channels.map(c=>c.group)).size} categorias</div></div>${l.source?`<button class="icon-btn" data-act="upd" data-i="${i}" title="Atualizar da URL" aria-label="Atualizar">↻</button>`:''}<button class="icon-btn" data-act="edit" data-i="${i}" title="Editar lista" aria-label="Editar">✎</button><button class="btn secondary" data-act="open" data-i="${i}">Abrir</button><button class="icon-btn" data-act="del" data-i="${i}" title="Excluir" aria-label="Excluir">🗑</button></div>`).join(''):'<div class="empty">Nenhuma lista salva ainda.</div>';
+  $('listsBox').innerHTML=lists.length?lists.map((l,i)=>`<div class="list-item ${l.name===activeName?'active':''}"><div class="li-info"><div class="channel-name">${escapeHtml(l.name)}</div><div class="channel-group">${l.count??l.channels.length} canais • ${l.groups??new Set(l.channels.map(c=>c.group)).size} categorias</div></div>${l.source?`<button class="icon-btn" data-act="upd" data-i="${i}" title="Atualizar da URL" aria-label="Atualizar">↻</button>`:''}<button class="icon-btn" data-act="edit" data-i="${i}" title="Editar lista" aria-label="Editar">✎</button><button class="btn secondary" data-act="open" data-i="${i}">Abrir</button><button class="icon-btn" data-act="del" data-i="${i}" title="Excluir" aria-label="Excluir">🗑</button></div>`).join(''):'<div class="empty">Nenhuma lista salva ainda.</div>';
 }
+function loadLocalAsset(name,path){try{const x=new XMLHttpRequest();x.open('GET',path);x.onload=()=>{if(x.status&&x.status!==200){toast('Não foi possível abrir '+name);return;}const parsed=parseM3U(x.responseText||'');if(!parsed.length){toast(name+' não contém canais válidos.');return;}channels=parsed;onListLoaded(name,'',x.responseText||'');};x.onerror=()=>toast('Não foi possível carregar '+name+'.');x.send();}catch(e){toast('Não foi possível carregar '+name+'.');}}
 function openList(i){
-  const l=lists[i];if(!l)return;channels=l.channels;activeName=l.name;currentFilter='all';currentChannel=null;shown=200;stopPlayback();
+  const l=lists[i];if(!l)return;if(l.asset&&!l.channels.length){loadLocalAsset(l.name,l.asset);return;}if(l.source&&!l.channels.length){$('m3uUrl').value=l.source;loadFromUrl(l.name);return;}channels=l.channels;activeName=l.name;currentFilter='all';currentChannel=null;shown=200;stopPlayback();
   $('placeholder').style.display='block';$('nowPlaying').textContent='Nenhum canal selecionado';$('nowGroup').textContent='Lista carregada';$('topChannel').textContent=l.name;$('topSub').textContent='Escolha um canal para assistir';
   try{localStorage.setItem('streambox_active',l.name);}catch(e){}
   refreshLibrary();setStatus('playing','LISTA OK');showHome();epgLoad(l.name);
@@ -582,9 +586,10 @@ function deleteList(i){
   renderListsDlg();
 }
 function stopPlayback(){if(hls){hls.destroy();hls=null;}const video=$('video');video.pause();video.removeAttribute('src');video.load();}
-function playChannel(id){
+function playChannel(id,fromPop=false){
   const channel=channels.find(c=>c.id===Number(id));if(!channel)return;
-  currentChannel=channel;recent=[channel.url,...recent.filter(u=>u!==channel.url)].slice(0,30);savePrefs();
+  const hadChannel=!!currentChannel;currentChannel=channel;recent=[channel.url,...recent.filter(u=>u!==channel.url)].slice(0,30);savePrefs();
+  if(!fromPop&&!hadChannel)navPush('player',{section,channelId:channel.id});
   $('nowPlaying').textContent=channel.name;$('nowGroup').textContent=channel.group;$('topChannel').textContent=channel.name;$('topSub').textContent=channel.group;$('placeholder').style.display='none';$('overlayMessage').style.display='none';
   const video=$('video');stopPlayback();hlsRetries=0;setStatus('loading','CONECTANDO');
   try{if('mediaSession' in navigator)navigator.mediaSession.metadata=new MediaMetadata({title:channel.name,artist:channel.group});}catch(e){}
@@ -646,7 +651,7 @@ async function toggleFullscreen(){
 $('loadUrlBtn').addEventListener('click',()=>loadFromUrl());
 $('pasteBtn').addEventListener('click',()=>{const d=$('pasteDlg');if(d.showModal)d.showModal();else d.setAttribute('open','');$('pasteText').focus();});
 $('pasteCancel').addEventListener('click',()=>$('pasteDlg').close());
-$('pasteOk').addEventListener('click',()=>{if(loadFromText($('pasteText').value,'Lista colada '+new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))){$('pasteDlg').close();$('pasteText').value='';}});
+$('pasteOk').addEventListener('click',()=>{const raw=$('pasteText').value;const oldName=editingListName;const name=pasteForEdit?($('addName').value.trim()||oldName):'Lista colada '+new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});if(loadFromText(raw,name)){if(pasteForEdit&&oldName&&oldName!==name){lists=lists.filter(l=>l.name!==oldName);persistLists();}editingListName='';pasteForEdit=false;$('pasteDlg').close();$('pasteText').value='';renderListsDlg();}});
 ['dragover','drop'].forEach(t=>document.addEventListener(t,e=>{e.preventDefault();if(t==='drop'&&e.dataTransfer.files[0])loadFromFile(e.dataTransfer.files[0]);}));
 $('fileBtn').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('fileInput').click();}});
 $('fileInput').addEventListener('change',e=>{loadFromFile(e.target.files[0]);e.target.value='';});
@@ -684,24 +689,26 @@ document.addEventListener('keydown',e=>{
 });
 $('listsBtn').addEventListener('click',()=>{renderListsDlg();const d=$('listsDlg');if(d.showModal)d.showModal();else d.setAttribute('open','');});
 $('listsClose').addEventListener('click',()=>$('listsDlg').close());
-let addMode='fields',editingListName='';
+let addMode='fields',editingListName='',pasteForEdit=false;
+function channelsToM3U(items){return '#EXTM3U\n'+(items||[]).map(c=>{const a=[];if(c.tvgId)a.push(`tvg-id="${String(c.tvgId).replace(/"/g,'')}"`);if(c.name)a.push(`tvg-name="${String(c.name).replace(/"/g,'')}"`);if(c.logo)a.push(`tvg-logo="${String(c.logo).replace(/"/g,'')}"`);if(c.group)a.push(`group-title="${String(c.group).replace(/"/g,'')}"`);return `#EXTINF:-1 ${a.join(' ')},${c.name||'Canal'}\n${c.url||''}`;}).join('\n');}
 function setAddMode(m){
   addMode=m;$('modeFields').classList.toggle('active',m==='fields');$('modeLink').classList.toggle('active',m==='link');
   $('boxFields').style.display=m==='fields'?'grid':'none';$('boxLink').style.display=m==='link'?'grid':'none';$('addMsg').textContent='';
 }
 function openAddDlg(){
   editingListName='';
-  ['addName','addUser','addPass','addServer','addUrl'].forEach(id=>$(id).value='');
-  $('addPass').type='password';$('addMsg').style.color='var(--muted)';setAddMode('fields');
+  ['addName','addUser','addPass','addServer','addUrl','addRaw'].forEach(id=>$(id).value='');$('rawEditor').style.display='none';
+  $('addPass').type='password';$('addOk').textContent='Adicionar';$('addMsg').style.color='var(--muted)';setAddMode('fields');
   showDlg($('addDlg'));$('addName').focus();
 }
 function openEditDlg(i){
   const l=lists[i];if(!l)return;editingListName=l.name;
-  ['addName','addUser','addPass','addServer','addUrl'].forEach(id=>$(id).value='');$('addName').value=l.name;
-  let u=null;try{u=new URL(l.source||'');}catch(e){}
-  if(u&&u.searchParams.get('username')){$('addUser').value=u.searchParams.get('username')||'';$('addPass').value=u.searchParams.get('password')||'';$('addServer').value=u.origin;setAddMode('fields');}
-  else{$('addUrl').value=l.source||'';setAddMode('link');}
-  $('addMsg').style.color='var(--muted)';$('addMsg').textContent=l.source?'Edite os dados e carregue novamente para salvar.':'Esta lista veio de arquivo/texto; aqui você pode alterar apenas o nome.';showDlg($('addDlg'));$('addName').focus();
+  ['addName','addUser','addPass','addServer','addUrl','addRaw'].forEach(id=>$(id).value='');$('addName').value=l.name;
+  if(l.source){$('addUrl').value=l.source;$('rawEditor').style.display='none';setAddMode('link');$('addMsg').textContent='Link original carregado. Edite e toque em Salvar para atualizar a lista.';}
+  else if(l.raw){$('addRaw').value=l.raw;$('rawEditor').style.display='grid';setAddMode('link');$('addMsg').textContent='Texto original carregado. Você pode editar, copiar e salvar o conteúdo.';}
+  else if(l.channels&&l.channels.length){$('addRaw').value=channelsToM3U(l.channels);$('rawEditor').style.display='grid';setAddMode('link');$('addMsg').textContent='Texto reconstruído a partir dos canais salvos. Você pode editar, copiar e salvar novamente.';}
+  else{$('rawEditor').style.display='none';setAddMode('link');$('addMsg').textContent='Esta lista antiga não tinha conteúdo salvo; é possível apenas alterar o nome.';}
+  $('addMsg').style.color='var(--muted)';$('addOk').textContent='Salvar alterações';showDlg($('addDlg'));$('addName').focus();
 }
 function addError(t,id){$('addMsg').style.color='var(--red)';$('addMsg').textContent=t;if(id)$(id).focus();}
 async function submitAdd(){
@@ -709,7 +716,9 @@ async function submitAdd(){
   const editing=editingListName&&lists.find(l=>l.name===editingListName);
   if(editing&&!editing.source&&!$('addUrl').value.trim()){
     const newName=$('addName').value.trim();if(!newName){addError('Informe um nome para a lista.','addName');return;}
-    const oldName=editing.name;editing.name=newName;if(activeName===oldName){activeName=newName;try{localStorage.setItem('streambox_active',newName);}catch(e){}}persistLists();editingListName='';$('addDlg').close();renderHome();renderListsDlg();toast('Nome da lista atualizado.');return;
+    const raw=$('addRaw').value.trim();
+    if(raw){const parsed=parseM3U(raw);if(!parsed.length){addError('O texto não contém uma lista M3U válida.','addRaw');return;}editing.channels=parsed;editing.raw=raw;}
+    const oldName=editing.name;editing.name=newName;if(activeName===oldName){activeName=newName;try{localStorage.setItem('streambox_active',newName);}catch(e){}}persistLists();editingListName='';$('addDlg').close();renderHome();renderListsDlg();toast(raw?'Lista atualizada.':'Nome da lista atualizado.');return;
   }
   if(addMode==='fields'){
     const user=$('addUser').value.trim(),pass=$('addPass').value.trim();
@@ -737,7 +746,7 @@ async function submitAdd(){
 }
 $('modeFields').addEventListener('click',()=>setAddMode('fields'));
 $('addFile').addEventListener('click',()=>{$('addDlg').close();$('fileInput').click();});
-$('addText').addEventListener('click',()=>{$('addDlg').close();showDlg($('pasteDlg'));$('pasteText').focus();});
+$('addText').addEventListener('click',()=>{pasteForEdit=!!editingListName;$('addDlg').close();showDlg($('pasteDlg'));$('pasteText').focus();});
 $('modeLink').addEventListener('click',()=>setAddMode('link'));
 $('addEye').addEventListener('click',()=>{const i=$('addPass');i.type=i.type==='password'?'text':'password';});
 $('listsAdd').addEventListener('click',()=>{$('listsDlg').close();openAddDlg();});
@@ -753,6 +762,7 @@ $('addPaste').addEventListener('click',async()=>{
   try{const t=(await navigator.clipboard.readText()).trim();if(!t)throw 0;$('addUrl').value=t;$('addMsg').textContent='';}
   catch(e){$('addMsg').style.color='var(--yellow)';$('addMsg').textContent='Não consegui acessar a área de transferência. Segure no campo e cole manualmente.';$('addUrl').focus();}
 });
+$('copyRawBtn').addEventListener('click',async()=>{const text=$('addRaw').value;if(!text){$('addMsg').textContent='Não há texto para copiar.';return;}try{await navigator.clipboard.writeText(text);$('addMsg').style.color='var(--green)';$('addMsg').textContent='Texto copiado para a área de transferência.';}catch(e){$('addRaw').focus();$('addRaw').select();$('addMsg').style.color='var(--yellow)';$('addMsg').textContent='Texto selecionado. Toque e segure para copiar manualmente.';}});
 $('listsBox').addEventListener('click',e=>{
   const b=e.target.closest('[data-act]');if(!b)return;const i=Number(b.dataset.i),a=b.dataset.act;
   if(a==='open'){openList(i);$('listsDlg').close();}
@@ -794,20 +804,19 @@ document.addEventListener('keydown',e=>{
   const els=[...$('home').querySelectorAll('button:not(:disabled)')],i=els.indexOf(document.activeElement),d=(e.key==='ArrowRight'||e.key==='ArrowDown')?1:-1;
   e.preventDefault();els[i<0?0:(i+d+els.length)%els.length].focus();
 });
-// Botão Voltar: fecha o que estiver aberto antes de sair do app
-let exitArmed=false,exitTimer;
-history.pushState({sb:1},'');
-window.addEventListener('popstate',()=>{
-  const keep=()=>history.pushState({sb:1},'');
+// Botão Voltar: cada tela tem uma entrada real no histórico do navegador/Android.
+history.replaceState({sb:1,view:'home'},'');
+window.addEventListener('popstate',event=>{
   const dlg=document.querySelector('dialog[open]');
-  if(dlg){dlg.close();keep();return;}
-  if(document.fullscreenElement){document.exitFullscreen().catch(()=>{});keep();return;}
-  if(!homeOn()){
-    if(window.matchMedia('(max-width:800px)').matches&&!$('sidebar').classList.contains('open')){setDrawer(true);keep();return;}
-    showHome();keep();return;
+  if(dlg){dlg.close();return;}
+  if(document.fullscreenElement){document.exitFullscreen().catch(()=>{});return;}
+  const state=event.state||{view:'home'},view=state.view||'home';
+  if(view==='player'&&state.channelId!=null){openSection(state.section||section||'live',true);playChannel(state.channelId,true);return;}
+  if(view==='list'){
+    section=state.section||section||'live';$('home').style.display='none';catView=false;currentFilter=state.filter||'all';currentChannel=null;stopPlayback();$('topChannel').textContent={live:'Ao vivo',movie:'Filmes',series:'Séries'}[section]||'Biblioteca';$('topSub').textContent='Escolha um item para assistir';refreshLibrary();if(window.matchMedia('(max-width:800px)').matches)setDrawer(true);return;
   }
-  if(exitArmed){clearTimeout(exitTimer);history.back();return;}
-  exitArmed=true;toast('Toque em voltar de novo para sair.');exitTimer=setTimeout(()=>{exitArmed=false;},2200);keep();
+  if(view==='category'){openSection(state.section||section||'live',true);return;}
+  showHome(true);
 });
 
 /* ===== V9: armazenamento IndexedDB + EPG ===== */
@@ -818,6 +827,9 @@ async getKey(){if(this.key)return this.key;let key=await this.get('__streambox_k
 async setEncrypted(k,v){const key=await this.getKey(),iv=crypto.getRandomValues(new Uint8Array(12)),data=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(v)));await this.set(k,{encrypted:true,iv:[...iv],data:[...new Uint8Array(data)]});},
 async getDecrypted(k){const raw=await this.get(k);if(!raw)return null;if(!raw.encrypted)return raw;const key=await this.getKey(),data=await crypto.subtle.decrypt({name:'AES-GCM',iv:new Uint8Array(raw.iv)},key,new Uint8Array(raw.data));return JSON.parse(new TextDecoder().decode(data));}};
 async function loadListsDB(){try{const v=await idb.getDecrypted('lists');if(Array.isArray(v)&&v.length){lists=v.filter(l=>l&&typeof l.name==='string'&&Array.isArray(l.channels));persistLists();return;}}catch(e){}if(lists.length)persistLists();}
+const defaultRemoteLists=[{name:'IPTV-org Brasil',source:'https://iptv-org.github.io/iptv/countries/br.m3u',count:398,groups:44},{name:'IPTV-org Categorias',source:'https://iptv-org.github.io/iptv/index.category.m3u',count:12396,groups:30},{name:'IPTV-org Português',source:'https://iptv-org.github.io/iptv/languages/por.m3u',count:485,groups:44}];
+const defaultLocalLists=[{name:'Lista 1',asset:'listas/lista_01.m3u',count:105,groups:10},{name:'Lista 2',asset:'listas/lista_02.m3u',count:410,groups:15},{name:'Lista 3',asset:'listas/lista_03.m3u',count:186,groups:2},{name:'Lista 4',asset:'listas/lista_04.m3u',count:394,groups:34},{name:'Lista 5',asset:'listas/lista_05.m3u',count:1145,groups:55}];
+function seedDefaultLists(){let changed=false;for(const d of [...defaultRemoteLists,...defaultLocalLists]){if(!lists.some(l=>(d.source&&l.source===d.source)||(d.asset&&l.asset===d.asset))){lists.push(Object.assign({channels:[],updated:0},d));changed=true;}}if(changed)persistLists();}
 let epg=null,m3uTvg='';
 const normN=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'');
 const hm=t=>new Date(t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -920,14 +932,14 @@ function renderCats(){
   const items=[['all','📚 Todos',P.length],['favorites','★ Favoritos',P.filter(c=>favorites.has(c.url)).length],['recent','◷ Recentes',P.filter(c=>recent.includes(c.url)).length],...[...cnt.keys()].sort((a,b)=>a.localeCompare(b,'pt-BR')).map(g=>[g,g,cnt.get(g)])];
   $('channelList').innerHTML=items.map(([k,l,n])=>`<button class="catitem" data-cat="${escapeHtml(k)}"><span>${escapeHtml(l)}</span><b>${n}</b></button>`).join('');
 }
-$('channelList').addEventListener('click',e=>{const b=e.target.closest('[data-cat]');if(!b)return;currentFilter=b.dataset.cat;catView=false;shown=200;autoSearch=false;refreshLibrary();$('channelList').scrollTop=0;});
-$('groupFilter').addEventListener('click',e=>{if(!e.target.closest('[data-back]'))return;catView=true;autoSearch=false;$('searchInput').value='';refreshLibrary();$('channelList').scrollTop=0;});
+$('channelList').addEventListener('click',e=>{const b=e.target.closest('[data-cat]');if(!b)return;currentFilter=b.dataset.cat;catView=false;shown=200;autoSearch=false;navPush('list',{section,filter:currentFilter});refreshLibrary();$('channelList').scrollTop=0;});
+$('groupFilter').addEventListener('click',e=>{if(!e.target.closest('[data-back]'))return;catView=true;autoSearch=false;$('searchInput').value='';navPush('category',{section});refreshLibrary();$('channelList').scrollTop=0;});
 $('searchInput').addEventListener('input',()=>{const q=$('searchInput').value.trim();if(q&&catView){catView=false;autoSearch=true;currentFilter='all';refreshLibrary();}else if(!q&&autoSearch){catView=true;autoSearch=false;refreshLibrary();}});
 
 function favNowUI(){const b=$('favNow'),c=currentChannel,on=!!c&&favorites.has(c.url);b.style.display=c?'grid':'none';b.textContent=on?'★':'☆';b.classList.toggle('on',on);b.setAttribute('aria-label',on?'Remover dos favoritos':'Favoritar');}
 $('favNow').addEventListener('click',()=>{if(!currentChannel)return;toggleFavorite(currentChannel.id);favNowUI();toast(favorites.has(currentChannel.url)?'Adicionado aos favoritos':'Removido dos favoritos');});
 $('closeDrawer').addEventListener('click',()=>setDrawer(false));
-async function boot(){await loadListsDB();
+async function boot(){await loadListsDB();seedDefaultLists();
 applySettings();
 const oldList=load('streambox_list',null);
 if(oldList&&Array.isArray(oldList.channels)&&oldList.channels.length&&!lists.some(l=>l.name===oldList.name)){lists.unshift({name:String(oldList.name||'Lista salva'),channels:oldList.channels,source:''});persistLists();}
@@ -935,21 +947,12 @@ try{localStorage.removeItem('streambox_list');}catch(e){}
 let lastActive='';try{lastActive=localStorage.getItem('streambox_active')||'';}catch(e){}
 let startIdx=lists.findIndex(l=>l.name===lastActive);if(startIdx<0&&lists.length)startIdx=0;
 if(startIdx>=0){openList(startIdx);$('nowGroup').textContent='Lista restaurada';setStatus('','PRONTO');}
-// webOS/PWA: se existir playlist.m3u junto do app, importa como "Lista do app"
-(function(){try{const x=new XMLHttpRequest();x.open('GET','playlist.m3u');x.onload=()=>{
-  if(x.status&&x.status!==200)return;const p=parseM3U(x.responseText||'');if(!p.length)return;
-  const n='Lista do app',item={name:n,channels:p,source:'',updated:Date.now()},i=lists.findIndex(l=>l.name===n);
-  if(i>=0)lists[i]=item;else lists.unshift(item);persistLists();
-  if((!activeName||activeName===n)&&!currentChannel)openList(lists.findIndex(l=>l.name===n));
-};x.send();}catch(e){}})();
 let savedUrl='';try{savedUrl=localStorage.getItem('streambox_last_url')||'';if(/[?&](username|user|password|pass|token|key)=/i.test(savedUrl)){localStorage.removeItem('streambox_last_url');savedUrl='';}}catch(e){}if(savedUrl)$('m3uUrl').value=savedUrl;
 refreshLibrary();}
 boot();
 </script>
 <script>
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => {}));
-}
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) { window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => {})); }
 </script>
 </body>
 </html>
